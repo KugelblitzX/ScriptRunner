@@ -1,0 +1,54 @@
+import com.atlassian.jira.component.ComponentAccessor
+import com.atlassian.jira.bc.user.UserService
+import com.atlassian.jira.issue.Issue
+import com.atlassian.jira.user.ApplicationUser
+import org.apache.log4j.Level
+import org.apache.log4j.Logger
+
+// Логирование
+def log = Logger.getLogger("com.example.jira") // Измените на ваш предпочтительный логгер
+log.setLevel(Level.DEBUG)
+
+// Получаем текущую задачу
+Issue issue = ComponentAccessor.getIssueManager().getIssueObject(issue.key)
+
+// Указываем имя пользовательского поля, из которого нужно получить пользователя
+def customFieldManager = ComponentAccessor.getCustomFieldManager()
+def customField = customFieldManager.getCustomFieldObjectByName("User Field") // Замените "User Field" на название вашего пользовательского поля
+ApplicationUser userToDeactivate = issue.getCustomFieldValue(customField) as ApplicationUser
+
+if (userToDeactivate) {
+    activateDeactivateUser(userToDeactivate.username, false, log)
+} else {
+    log.info "Пользователь не найден в пользовательском поле"
+}
+
+static def activateDeactivateUser(String userName, Boolean activate, log) {
+    def userToUpdate = ComponentAccessor.getUserManager().getUserByName(userName)
+    if (userToUpdate) {
+        def userService = ComponentAccessor.getComponent(UserService)
+        def updateUser = userService.newUserBuilder(userToUpdate).active(activate).build()
+        def updateUserValidationResult = userService.validateUpdateUser(updateUser)
+        if (!updateUserValidationResult.valid) {
+            log.error "Обновление ${userToUpdate.name} не удалось. ${updateUserValidationResult.errorCollection}"
+            return
+        }
+
+        switch (activate) {
+            case true:
+                userToUpdate.isActive() ? log.info("Пользователь уже активен") : log.info("Попытка активации")
+                userService.updateUser(updateUserValidationResult)
+                log.info "${updateUser.name} активирован"
+                break
+            case false:
+                !userToUpdate.isActive() ? log.info("Пользователь уже неактивен") : log.info("Попытка деактивации")
+                userService.updateUser(updateUserValidationResult)
+                log.info "${updateUser.name} деактивирован"
+                break
+            default:
+                break
+        }
+    } else {
+        log.info "Пользователь не найден"
+    }
+}
