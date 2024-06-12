@@ -1,0 +1,10 @@
+import com.atlassian.jira.component.ComponentAccessor
+
+// Получите текущее значение поля
+def customFieldManager = ComponentAccessor.getCustomFieldManager()
+def issue = ComponentAccessor.getIssueManager().getIssueObject(issue.id)
+def customField = customFieldManager.getCustomFieldObjectByName("Your Custom Field Name")
+def fieldValue = issue.getCustomFieldValue(customField)
+
+// Проверьте значение поля
+return fieldValue == "Your Desired Value"
