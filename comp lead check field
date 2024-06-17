@@ -19,10 +19,11 @@ def statusField = customFieldManager.getCustomFieldObjectByName("Component Lead 
 ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as ApplicationUser
 
 if (userToDeactivate) {
-    if (isComponentLead(userToDeactivate)) {
+    if (isComponentLead(userToDeactivate, log)) {
         log.info "Пользователь является Component Lead и не может быть деактивирован."
         setStatusField(issue, statusField, "Component Lead", log)
     } else {
+        log.info "Пользователь не является Component Lead."
         setStatusField(issue, statusField, "Not Component Lead", log)
         activateDeactivateUser(userToDeactivate.username, false, log)
     }
@@ -31,7 +32,7 @@ if (userToDeactivate) {
     setStatusField(issue, statusField, "No User", log)
 }
 
-static def isComponentLead(ApplicationUser user) {
+static def isComponentLead(ApplicationUser user, def log) {
     def projectComponentManager = ComponentAccessor.getProjectComponentManager()
     def projectManager = ComponentAccessor.getProjectManager()
 
@@ -40,6 +41,7 @@ static def isComponentLead(ApplicationUser user) {
         def components = projectComponentManager.findAllForProject(project.id)
         for (component in components) {
             if (component.lead == user.username) {
+                log.info "Пользователь ${user.username} является лидером компонента в проекте ${project.name}"
                 return true
             }
         }
@@ -54,7 +56,12 @@ static def setStatusField(Issue issue, def statusField, String status, def log) 
     issueInputParameters.addCustomFieldValue(statusField.idAsLong, status)
     def updateValidationResult = issueService.validateUpdate(user, issue.id, issueInputParameters)
     if (updateValidationResult.isValid()) {
-        issueService.update(user, updateValidationResult)
+        def updateResult = issueService.update(user, updateValidationResult)
+        if (updateResult.isValid()) {
+            log.info "Поле статуса успешно обновлено на: ${status}"
+        } else {
+            log.error "Не удалось обновить поле статуса: ${updateResult.errorCollection}"
+        }
     } else {
         log.error "Не удалось обновить поле статуса: ${updateValidationResult.errorCollection}"
     }
