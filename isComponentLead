@@ -28,10 +28,19 @@ if (userToDeactivate) {
 }
 
 static def isComponentLead(ApplicationUser user) {
-    def componentManager = ComponentAccessor.getProjectComponentManager()
-    def allComponents = componentManager.findAllComponents()
+    def projectComponentManager = ComponentAccessor.getProjectComponentManager()
+    def projectManager = ComponentAccessor.getProjectManager()
 
-    allComponents.any { it.lead == user.username }
+    def allProjects = projectManager.getProjectObjects()
+    for (project in allProjects) {
+        def components = projectComponentManager.findAllForProject(project.id)
+        for (component in components) {
+            if (component.lead == user.username) {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 static def activateDeactivateUser(String userName, Boolean activate, log) {
