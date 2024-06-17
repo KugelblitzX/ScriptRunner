@@ -21,14 +21,14 @@ ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as Appli
 if (userToDeactivate) {
     if (isComponentLead(userToDeactivate)) {
         log.info "Пользователь является Component Lead и не может быть деактивирован."
-        setStatusField(issue, statusField, "Component Lead")
+        setStatusField(issue, statusField, "Component Lead", log)
     } else {
-        setStatusField(issue, statusField, "Not Component Lead")
+        setStatusField(issue, statusField, "Not Component Lead", log)
         activateDeactivateUser(userToDeactivate.username, false, log)
     }
 } else {
     log.info "Пользователь не найден в пользовательском поле"
-    setStatusField(issue, statusField, "No User")
+    setStatusField(issue, statusField, "No User", log)
 }
 
 static def isComponentLead(ApplicationUser user) {
@@ -47,7 +47,7 @@ static def isComponentLead(ApplicationUser user) {
     return false
 }
 
-static def setStatusField(Issue issue, def statusField, String status) {
+static def setStatusField(Issue issue, def statusField, String status, def log) {
     def issueService = ComponentAccessor.getIssueService()
     def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
     def issueInputParameters = issueService.newIssueInputParameters()
@@ -60,7 +60,7 @@ static def setStatusField(Issue issue, def statusField, String status) {
     }
 }
 
-static def activateDeactivateUser(String userName, Boolean activate, log) {
+static def activateDeactivateUser(String userName, Boolean activate, def log) {
     def userToUpdate = ComponentAccessor.getUserManager().getUserByName(userName)
     if (userToUpdate) {
         def userService = ComponentAccessor.getComponent(UserService)
