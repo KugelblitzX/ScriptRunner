@@ -2,7 +2,6 @@ import com.atlassian.jira.component.ComponentAccessor
 import com.atlassian.jira.bc.user.UserService
 import com.atlassian.jira.issue.Issue
 import com.atlassian.jira.user.ApplicationUser
-import com.atlassian.jira.project.ProjectComponentManager
 import org.apache.log4j.Level
 import org.apache.log4j.Logger
 
@@ -29,8 +28,10 @@ if (userToDeactivate) {
 }
 
 static def isComponentLead(ApplicationUser user) {
-    def projectComponentManager = ComponentAccessor.getProjectComponentManager()
-    def components = projectComponentManager.findAllForProject(user.project)
+    def projectManager = ComponentAccessor.getProjectManager()
+    def componentManager = ComponentAccessor.getProjectComponentManager()
+    def components = componentManager.findAllForProject(projectManager.getProjectObjByKey(user.project.key))
+    
     components.any { it.lead == user.username }
 }
 
