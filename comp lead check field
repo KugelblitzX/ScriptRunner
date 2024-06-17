@@ -1,0 +1,91 @@
+import com.atlassian.jira.component.ComponentAccessor
+import com.atlassian.jira.bc.user.UserService
+import com.atlassian.jira.issue.Issue
+import com.atlassian.jira.user.ApplicationUser
+import org.apache.log4j.Level
+import org.apache.log4j.Logger
+
+// Логирование
+def log = Logger.getLogger("com.example.jira")
+log.setLevel(Level.DEBUG)
+
+// Получаем текущую задачу
+Issue issue = ComponentAccessor.getIssueManager().getIssueObject(issue.key)
+
+// Указываем имя пользовательского поля, из которого нужно получить пользователя
+def customFieldManager = ComponentAccessor.getCustomFieldManager()
+def userField = customFieldManager.getCustomFieldObjectByName("User Field") // Замените "User Field" на название вашего пользовательского поля
+def statusField = customFieldManager.getCustomFieldObjectByName("Component Lead Status") // Добавьте пользовательское поле для статуса
+ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as ApplicationUser
+
+if (userToDeactivate) {
+    if (isComponentLead(userToDeactivate)) {
+        log.info "Пользователь является Component Lead и не может быть деактивирован."
+        setStatusField(issue, statusField, "Component Lead")
+    } else {
+        setStatusField(issue, statusField, "Not Component Lead")
+        activateDeactivateUser(userToDeactivate.username, false, log)
+    }
+} else {
+    log.info "Пользователь не найден в пользовательском поле"
+    setStatusField(issue, statusField, "No User")
+}
+
+static def isComponentLead(ApplicationUser user) {
+    def projectComponentManager = ComponentAccessor.getProjectComponentManager()
+    def projectManager = ComponentAccessor.getProjectManager()
+
+    def allProjects = projectManager.getProjectObjects()
+    for (project in allProjects) {
+        def components = projectComponentManager.findAllForProject(project.id)
+        for (component in components) {
+            if (component.lead == user.username) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+static def setStatusField(Issue issue, def statusField, String status) {
+    def issueService = ComponentAccessor.getIssueService()
+    def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
+    def issueInputParameters = issueService.newIssueInputParameters()
+    issueInputParameters.addCustomFieldValue(statusField.idAsLong, status)
+    def updateValidationResult = issueService.validateUpdate(user, issue.id, issueInputParameters)
+    if (updateValidationResult.isValid()) {
+        issueService.update(user, updateValidationResult)
+    } else {
+        log.error "Не удалось обновить поле статуса: ${updateValidationResult.errorCollection}"
+    }
+}
+
+static def activateDeactivateUser(String userName, Boolean activate, log) {
+    def userToUpdate = ComponentAccessor.getUserManager().getUserByName(userName)
+    if (userToUpdate) {
+        def userService = ComponentAccessor.getComponent(UserService)
+        def updateUser = userService.newUserBuilder(userToUpdate).active(activate).build()
+        def updateUserValidationResult = userService.validateUpdateUser(updateUser)
+        if (!updateUserValidationResult.valid) {
+            log.error "Обновление ${userToUpdate.name} не удалось. ${updateUserValidationResult.errorCollection}"
+            return
+        }
+
+        switch (activate) {
+            case true:
+                userToUpdate.isActive() ? log.info("Пользователь уже активен") : log.info("Попытка активации")
+                userService.updateUser(updateUserValidationResult)
+                log.info "${updateUser.name} активирован"
+                break
+            case false:
+                !userToUpdate.isActive() ? log.info("Пользователь уже неактивен") : log.info("Попытка деактивации")
+                userService.updateUser(updateUserValidationResult)
+                log.info "${updateUser.name} деактивирован"
+                break
+            default:
+                break
+        }
+    } else {
+        log.info "Пользователь не найден"
+    }
+}
