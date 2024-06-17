@@ -19,7 +19,8 @@ def statusField = customFieldManager.getCustomFieldObjectByName("Component Lead 
 ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as ApplicationUser
 
 if (userToDeactivate) {
-    if (isComponentLead(userToDeactivate, log)) {
+    boolean isLead = isComponentLead(userToDeactivate, log)
+    if (isLead) {
         log.info "Пользователь является Component Lead и не может быть деактивирован."
         setStatusField(issue, statusField, "Component Lead", log)
     } else {
