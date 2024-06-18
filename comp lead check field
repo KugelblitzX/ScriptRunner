@@ -18,13 +18,15 @@ def userField = customFieldManager.getCustomFieldObjectByName("User Field") // �
 def statusField = customFieldManager.getCustomFieldObjectByName("Component Lead Status") // Добавьте пользовательское поле для статуса
 ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as ApplicationUser
 
+log.info "Проверка пользователя ${userToDeactivate?.username} на статус Component Lead."
+
 if (userToDeactivate) {
     boolean isLead = isComponentLead(userToDeactivate, log)
     if (isLead) {
-        log.info "Пользователь является Component Lead и не может быть деактивирован."
+        log.info "Пользователь ${userToDeactivate.username} является Component Lead и не может быть деактивирован."
         setStatusField(issue, statusField, "Component Lead", log)
     } else {
-        log.info "Пользователь не является Component Lead."
+        log.info "Пользователь ${userToDeactivate.username} не является Component Lead."
         setStatusField(issue, statusField, "Not Component Lead", log)
         activateDeactivateUser(userToDeactivate.username, false, log)
     }
@@ -51,20 +53,23 @@ static def isComponentLead(ApplicationUser user, def log) {
 }
 
 static def setStatusField(Issue issue, def statusField, String status, def log) {
+    def customFieldManager = ComponentAccessor.getCustomFieldManager()
+    def mutableIssue = ComponentAccessor.getIssueManager().getIssueObject(issue.id)
+    def fieldLayoutItem = ComponentAccessor.getFieldLayoutManager().getFieldLayout(mutableIssue).getFieldLayoutItem(statusField)
     def issueService = ComponentAccessor.getIssueService()
     def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
-    def issueInputParameters = issueService.newIssueInputParameters()
-    issueInputParameters.addCustomFieldValue(statusField.idAsLong, status)
-    def updateValidationResult = issueService.validateUpdate(user, issue.id, issueInputParameters)
-    if (updateValidationResult.isValid()) {
-        def updateResult = issueService.update(user, updateValidationResult)
+
+    mutableIssue.setCustomFieldValue(statusField, status)
+    def validationResult = issueService.validateUpdate(user, mutableIssue.id, issueService.newIssueInputParameters())
+    if (validationResult.isValid()) {
+        def updateResult = issueService.update(user, validationResult)
         if (updateResult.isValid()) {
             log.info "Поле статуса успешно обновлено на: ${status}"
         } else {
             log.error "Не удалось обновить поле статуса: ${updateResult.errorCollection}"
         }
     } else {
-        log.error "Не удалось обновить поле статуса: ${updateValidationResult.errorCollection}"
+        log.error "Не удалось обновить поле статуса: ${validationResult.errorCollection}"
     }
 }
 
