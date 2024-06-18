@@ -21,35 +21,17 @@ ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as Appli
 log.info "Проверка пользователя ${userToDeactivate?.username} на статус Component Lead."
 
 if (userToDeactivate) {
-    boolean isLead = isComponentLead(userToDeactivate, log)
-    if (isLead) {
+    boolean success = activateDeactivateUser(userToDeactivate.username, false, log)
+    if (!success) {
         log.info "Пользователь ${userToDeactivate.username} является Component Lead и не может быть деактивирован."
         setStatusField(issue, statusField, "Component Lead", log)
     } else {
-        log.info "Пользователь ${userToDeactivate.username} не является Component Lead."
+        log.info "Пользователь ${userToDeactivate.username} деактивирован."
         setStatusField(issue, statusField, "Not Component Lead", log)
-        activateDeactivateUser(userToDeactivate.username, false, log)
     }
 } else {
     log.info "Пользователь не найден в пользовательском поле"
     setStatusField(issue, statusField, "No User", log)
-}
-
-static def isComponentLead(ApplicationUser user, def log) {
-    def projectComponentManager = ComponentAccessor.getProjectComponentManager()
-    def projectManager = ComponentAccessor.getProjectManager()
-
-    def allProjects = projectManager.getProjectObjects()
-    for (project in allProjects) {
-        def components = projectComponentManager.findAllForProject(project.id)
-        for (component in components) {
-            if (component.lead == user.username) {
-                log.info "Пользователь ${user.username} является лидером компонента в проекте ${project.name}"
-                return true
-            }
-        }
-    }
-    return false
 }
 
 static def setStatusField(Issue issue, def statusField, String status, def log) {
@@ -77,8 +59,13 @@ static def activateDeactivateUser(String userName, Boolean activate, def log) {
         def updateUser = userService.newUserBuilder(userToUpdate).active(activate).build()
         def updateUserValidationResult = userService.validateUpdateUser(updateUser)
         if (!updateUserValidationResult.valid) {
+            def errors = updateUserValidationResult.errorCollection.errors
+            if (errors && errors.active && errors.active.contains("Cannot deactivate user because they are currently a component lead")) {
+                log.error "Обновление ${userToUpdate.name} не удалось. Errors: ${errors}"
+                return false
+            }
             log.error "Обновление ${userToUpdate.name} не удалось. ${updateUserValidationResult.errorCollection}"
-            return
+            return false
         }
 
         switch (activate) {
@@ -86,16 +73,17 @@ static def activateDeactivateUser(String userName, Boolean activate, def log) {
                 userToUpdate.isActive() ? log.info("Пользователь уже активен") : log.info("Попытка активации")
                 userService.updateUser(updateUserValidationResult)
                 log.info "${updateUser.name} активирован"
-                break
+                return true
             case false:
                 !userToUpdate.isActive() ? log.info("Пользователь уже неактивен") : log.info("Попытка деактивации")
                 userService.updateUser(updateUserValidationResult)
                 log.info "${updateUser.name} деактивирован"
-                break
+                return true
             default:
-                break
+                return false
         }
     } else {
         log.info "Пользователь не найден"
+        return false
     }
 }
