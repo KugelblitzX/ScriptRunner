@@ -53,23 +53,20 @@ static def isComponentLead(ApplicationUser user, def log) {
 }
 
 static def setStatusField(Issue issue, def statusField, String status, def log) {
-    def customFieldManager = ComponentAccessor.getCustomFieldManager()
-    def mutableIssue = ComponentAccessor.getIssueManager().getIssueObject(issue.id)
-    def fieldLayoutItem = ComponentAccessor.getFieldLayoutManager().getFieldLayout(mutableIssue).getFieldLayoutItem(statusField)
     def issueService = ComponentAccessor.getIssueService()
     def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
-
-    mutableIssue.setCustomFieldValue(statusField, status)
-    def validationResult = issueService.validateUpdate(user, mutableIssue.id, issueService.newIssueInputParameters())
-    if (validationResult.isValid()) {
-        def updateResult = issueService.update(user, validationResult)
+    def issueInputParameters = issueService.newIssueInputParameters()
+    issueInputParameters.addCustomFieldValue(statusField.idAsLong, status)
+    def updateValidationResult = issueService.validateUpdate(user, issue.id, issueInputParameters)
+    if (updateValidationResult.isValid()) {
+        def updateResult = issueService.update(user, updateValidationResult)
         if (updateResult.isValid()) {
             log.info "Поле статуса успешно обновлено на: ${status}"
         } else {
             log.error "Не удалось обновить поле статуса: ${updateResult.errorCollection}"
         }
     } else {
-        log.error "Не удалось обновить поле статуса: ${validationResult.errorCollection}"
+        log.error "Не удалось обновить поле статуса: ${updateValidationResult.errorCollection}"
     }
 }
 
