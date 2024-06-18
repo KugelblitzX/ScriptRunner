@@ -1,0 +1,120 @@
+import com.atlassian.jira.component.ComponentAccessor
+import com.atlassian.jira.bc.user.UserService
+import com.atlassian.jira.issue.Issue
+import com.atlassian.jira.issue.comments.CommentManager
+import com.atlassian.jira.user.ApplicationUser
+import com.opensymphony.workflow.InvalidInputException
+import org.apache.log4j.Level
+import org.apache.log4j.Logger
+
+// Логирование
+def log = Logger.getLogger("com.example.jira")
+log.setLevel(Level.DEBUG)
+
+// Получаем текущую задачу
+Issue issue = ComponentAccessor.getIssueManager().getIssueObject(issue.key)
+
+// Указываем имя пользовательского поля, из которого нужно получить пользователя
+def customFieldManager = ComponentAccessor.getCustomFieldManager()
+def userField = customFieldManager.getCustomFieldObjectByName("User Field") // Замените "User Field" на название вашего пользовательского поля
+def statusField = customFieldManager.getCustomFieldObjectByName("Component Lead Status") // Добавьте пользовательское поле для статуса
+def customField1 = customFieldManager.getCustomFieldObjectByName("CustomField1") // Добавьте пользовательское поле для цифры "1"
+ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as ApplicationUser
+
+log.info "Проверка пользователя ${userToDeactivate?.username} на статус Component Lead."
+
+if (userToDeactivate) {
+    boolean success = activateDeactivateUser(userToDeactivate.username, false, log)
+    if (!success) {
+        log.info "Пользователь ${userToDeactivate.username} является Component Lead и не может быть деактивирован."
+        setStatusField(issue, statusField, "Component Lead", log)
+        throw new InvalidInputException("Пользователь ${userToDeactivate.username} является Component Lead и не может быть деактивирован.")
+    } else {
+        log.info "Пользователь ${userToDeactivate.username} деактивирован."
+        setStatusField(issue, statusField, "Not Component Lead", log)
+        setCustomField1(issue, customField1, "1", log)
+        addComment(issue, "User deactivated: ${userToDeactivate.displayName}", log)
+    }
+} else {
+    log.info "Пользователь не найден в пользовательском поле"
+    setStatusField(issue, statusField, "No User", log)
+}
+
+static def setStatusField(Issue issue, def statusField, String status, def log) {
+    def issueService = ComponentAccessor.getIssueService()
+    def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
+    def issueInputParameters = issueService.newIssueInputParameters()
+    issueInputParameters.addCustomFieldValue(statusField.idAsLong, status)
+    def updateValidationResult = issueService.validateUpdate(user, issue.id, issueInputParameters)
+    if (updateValidationResult.isValid()) {
+        def updateResult = issueService.update(user, updateValidationResult)
+        if (updateResult.isValid()) {
+            log.info "Поле статуса успешно обновлено на: ${status}"
+        } else {
+            log.error "Не удалось обновить поле статуса: ${updateResult.errorCollection}"
+        }
+    } else {
+        log.error "Не удалось обновить поле статуса: ${updateValidationResult.errorCollection}"
+    }
+}
+
+static def setCustomField1(Issue issue, def customField1, String value, def log) {
+    def issueService = ComponentAccessor.getIssueService()
+    def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
+    def issueInputParameters = issueService.newIssueInputParameters()
+    issueInputParameters.addCustomFieldValue(customField1.idAsLong, value)
+    def updateValidationResult = issueService.validateUpdate(user, issue.id, issueInputParameters)
+    if (updateValidationResult.isValid()) {
+        def updateResult = issueService.update(user, updateValidationResult)
+        if (updateResult.isValid()) {
+            log.info "Поле CustomField1 успешно обновлено на: ${value}"
+        } else {
+            log.error "Не удалось обновить поле CustomField1: ${updateResult.errorCollection}"
+        }
+    } else {
+        log.error "Не удалось обновить поле CustomField1: ${updateValidationResult.errorCollection}"
+    }
+}
+
+static def addComment(Issue issue, String commentText, def log) {
+    def commentManager = ComponentAccessor.getCommentManager()
+    def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
+    commentManager.create(issue, user, commentText, true)
+    log.info "Комментарий добавлен: ${commentText}"
+}
+
+static def activateDeactivateUser(String userName, Boolean activate, def log) {
+    def userToUpdate = ComponentAccessor.getUserManager().getUserByName(userName)
+    if (userToUpdate) {
+        def userService = ComponentAccessor.getComponent(UserService)
+        def updateUser = userService.newUserBuilder(userToUpdate).active(activate).build()
+        def updateUserValidationResult = userService.validateUpdateUser(updateUser)
+        if (!updateUserValidationResult.valid) {
+            def errors = updateUserValidationResult.errorCollection.errors
+            if (errors && errors.active && errors.active.contains("Cannot deactivate user because they are currently a component lead")) {
+                log.error "Обновление ${userToUpdate.name} не удалось. Errors: ${errors}"
+                return false
+            }
+            log.error "Обновление ${userToUpdate.name} не удалось. ${updateUserValidationResult.errorCollection}"
+            return false
+        }
+
+        switch (activate) {
+            case true:
+                userToUpdate.isActive() ? log.info("Пользователь уже активен") : log.info("Попытка активации")
+                userService.updateUser(updateUserValidationResult)
+                log.info "${updateUser.name} активирован"
+                return true
+            case false:
+                !userToUpdate.isActive() ? log.info("Пользователь уже неактивен") : log.info("Попытка деактивации")
+                userService.updateUser(updateUserValidationResult)
+                log.info "${updateUser.name} деактивирован"
+                return true
+            default:
+                return false
+        }
+    } else {
+        log.info "Пользователь не найден"
+        return false
+    }
+}
