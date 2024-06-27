@@ -34,22 +34,23 @@ if (userToCheck) {
 }
 
 static def checkComponentLead(ApplicationUser user, def log) {
-    // Отримуємо компоненти проектів
     def projectComponentManager = ComponentAccessor.getProjectComponentManager()
     def projectManager = ComponentAccessor.getProjectManager()
+    def leadStatus = false
     
     // Проходимо по всіх проектах і компонентах, щоб перевірити статус Component Lead
     def allProjects = projectManager.getProjectObjects()
     for (project in allProjects) {
         def components = projectComponentManager.findAllForProject(project.id)
         for (component in components) {
-            if (component.lead == user.username) {
-                log.info "Користувач ${user.username} є лідером компонента в проекті ${project.name}"
-                return true
+            log.info "Перевірка компонента ${component.name} у проекті ${project.name} для користувача ${user.username}"
+            if (component.lead == user.key) {
+                log.info "Користувач ${user.username} є лідером компонента ${component.name} у проекті ${project.name}"
+                leadStatus = true
             }
         }
     }
-    return false
+    return leadStatus
 }
 
 static def setStatusField(Issue issue, def statusField, String status, def log) {
