@@ -13,9 +13,6 @@ ApplicationUser userToDeactivate = issue.getCustomFieldValue(userField) as Appli
 
 if (userToDeactivate) {
     deactivateUser(userToDeactivate.username)
-} else {
-    // Логування можна залишити на випадок, якщо користувача не знайдено
-    log.info "Не знайшов юзера в полі 'JIRA user'"
 }
 
 static def deactivateUser(String userName) {
@@ -38,14 +35,11 @@ static def deactivateUser(String userName) {
 
         // Деактивуємо користувача
         if (!userToUpdate.isActive()) {
-            log.info("Користувач вже неактивний")
+            return true
         } else {
             userService.updateUser(updateUserValidationResult)
-            log.info("${updateUser.name} деактивований")
+            return true
         }
-        return true
-    } else {
-        log.info "Користувача не знайдено"
-        return false
     }
+    return false
 }
