@@ -1,33 +1,33 @@
 import com.atlassian.jira.component.ComponentAccessor
+import com.atlassian.jira.user.util.UserManager
+import com.atlassian.jira.bc.group.GroupService
+import com.atlassian.jira.bc.group.GroupService.RemoveUserFromGroupValidationResult
 
-def userUtil = ComponentAccessor.userUtil
-def userManager = ComponentAccessor.userManager
 def customFieldManager = ComponentAccessor.getCustomFieldManager()
+def userManager = ComponentAccessor.getUserManager()
+def groupService = ComponentAccessor.getComponent(GroupService)
 
 // Получаем значение customfield_1 из текущего задания
 def customField = customFieldManager.getCustomFieldObjectByName("customfield_1")
 def userKey = issue.getCustomFieldValue(customField) as String
-def userToRemove = userManager.getUserByName(userKey)
+def user = userManager.getUserByKey(userKey)
 
-if (!userToRemove) {
-    log.warn("User: $userKey doesn't exist")
-    return
-}
-
-// Получаем все группы, в которых состоит пользователь
-def userGroups = ComponentAccessor.getGroupManager().getGroupsForUser(userToRemove.name)
-
-if (!userGroups) {
-    log.warn("User: $userToRemove.username is not in any group")
-    return
-}
-
-userGroups.each { group ->
-    if (!group) {
-        log.warn("Group doesn't exist")
-        return
+if (user) {
+    // Получаем все группы, в которых состоит пользователь
+    def groups = ComponentAccessor.getGroupManager().getGroupsForUser(user.name)
+    
+    groups.each { group ->
+        // Валидация удаления пользователя из группы
+        RemoveUserFromGroupValidationResult validationResult = groupService.validateRemoveUserFromGroup(user.directoryUser, group)
+        
+        if (validationResult.isValid()) {
+            // Удаление пользователя из группы
+            groupService.removeUserFromGroup(validationResult)
+            log.info("User ${user.name} removed from group ${group.name}")
+        } else {
+            log.warn("Failed to remove user ${user.name} from group ${group.name}: ${validationResult.errorCollection}")
+        }
     }
-
-    userUtil.removeUserFromGroup(group, userToRemove)
-    log.warn("User: $userToRemove.username removed from the group: ${group.name}")
+} else {
+    log.warn("User with key ${userKey} not found")
 }
